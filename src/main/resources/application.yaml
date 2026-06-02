@@ -6,8 +6,8 @@ wso2:
     host: https://localhost:9443
     admin-username: admin
     admin-password: admin
-    clientId: 6SrFRZk5uLJxkBEjtZUu23J97L0a
-    clientName: scim2_client
+    client-id: EaxFExdPy_UxaJcaGqrbMD_NLbMa
+    client-secret: tHUOUhdwlzQR024LsmbLTmuUdywa
   apim:
     host: https://localhost:9443
     admin-username: admin

@@ -1,6 +1,7 @@
 package com.example.usersignupworkflow.service;
 
 import com.example.usersignupworkflow.model.ScimUserResponse;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +14,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -45,58 +45,83 @@ public class WsoUserService {
         String username = sanitizeUsername(rawUsername);
         log.info("Fetching user from WSO2 IS — username: {}", username);
 
-        try {
-            // Step 1: Get Bearer token
-            String token = getAccessToken();
-            if (token == null) {
-                log.error("Failed to get access token from WSO2 IS");
-                return null;
-            }
+        // Try Method 1: SCIM2 with Bearer token
+        ScimUserResponse.ScimUser user = fetchUserViaScim2(username);
+        if (user != null) return user;
 
-            // Step 2: Call SCIM2 with Bearer token
+        // Try Method 2: SCIM2 with Basic Auth directly
+        log.warn("SCIM2 Bearer failed — trying Basic Auth");
+        user = fetchUserViaScim2BasicAuth(username);
+        if (user != null) return user;
+
+        log.error("All methods failed to fetch user: {}", username);
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Method 1: SCIM2 with Bearer Token
+    // -------------------------------------------------------------------------
+
+    private ScimUserResponse.ScimUser fetchUserViaScim2(String username) {
+        try {
+            String token = getAccessToken();
+            if (token == null) return null;
+
             String url = isHost + "/scim2/Users?filter=userName+eq+" + username;
-            log.info("SCIM2 URL: {}", url);
+            log.info("SCIM2 Bearer URL: {}", url);
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", "Bearer " + token);
             headers.set("Accept", "application/json");
 
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
-
             ResponseEntity<String> response = restTemplate.exchange(
-                    url, HttpMethod.GET, entity, String.class);
+                    url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
-            String body = response.getBody();
-            log.info("SCIM2 response status : {}", response.getStatusCode());
-            log.info("SCIM2 response body   : {}", body);
-
-            if (body == null || body.trim().startsWith("<")) {
-                log.error("SCIM2 returned HTML — unexpected");
-                return null;
-            }
-
-            ScimUserResponse scimResponse =
-                    objectMapper.readValue(body, ScimUserResponse.class);
-
-            if (scimResponse.getTotalResults() == 0
-                    || scimResponse.getResources() == null
-                    || scimResponse.getResources().isEmpty()) {
-                log.warn("No user found in WSO2 IS for username: {}", username);
-                return null;
-            }
-
-            ScimUserResponse.ScimUser user = scimResponse.getResources().get(0);
-            log.info("User found — name: {}, email: {}",
-                    user.getFullName(), user.getPrimaryEmail());
-
-            return user;
+            return parseScimResponse(response.getBody(), username);
 
         } catch (Exception e) {
-            log.error("Failed to fetch user '{}': {}", username, e.getMessage(), e);
+            log.warn("SCIM2 Bearer method failed: {}", e.getMessage());
             return null;
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Method 2: SCIM2 with Basic Auth
+    // -------------------------------------------------------------------------
+
+    private ScimUserResponse.ScimUser fetchUserViaScim2BasicAuth(String username) {
+        try {
+            String url = isHost + "/scim2/Users?filter=userName+eq+" + username;
+            log.info("SCIM2 BasicAuth URL: {}", url);
+
+            String credentials = adminUsername + ":" + adminPassword;
+            String basicAuth = "Basic " + Base64.getEncoder()
+                    .encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", basicAuth);
+            headers.set("Accept", "application/json");
+
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+            String body = response.getBody();
+            log.info("SCIM2 BasicAuth response: {}", body);
+
+            if (body != null && body.trim().startsWith("{") && !body.contains("\"status\":401")) {
+                return parseScimResponse(body, username);
+            }
+
+            return null;
+
+        } catch (Exception e) {
+            log.warn("SCIM2 BasicAuth method failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Token fetcher
     // -------------------------------------------------------------------------
 
     private String getAccessToken() {
@@ -115,20 +140,50 @@ public class WsoUserService {
             body.add("grant_type", "password");
             body.add("username", adminUsername);
             body.add("password", adminPassword);
-            body.add("scope", "openid");
+            body.add("scope", "internal_user_mgt_view internal_user_mgt_list openid");
 
-            HttpEntity<MultiValueMap<String, String>> entity =
-                    new HttpEntity<>(body, headers);
+            HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(body, headers);
 
-            ResponseEntity<Map> response = restTemplate.exchange(
-                    tokenUrl, HttpMethod.POST, entity, Map.class);
+            ResponseEntity<JsonNode> response = restTemplate.exchange(
+                    tokenUrl, HttpMethod.POST, entity, JsonNode.class);
 
-            String token = (String) response.getBody().get("access_token");
+            String token = response.getBody().get("access_token").asText();
             log.info("Access token obtained successfully");
             return token;
 
         } catch (Exception e) {
-            log.error("Failed to get access token: {}", e.getMessage(), e);
+            log.error("Failed to get access token: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parser
+    // -------------------------------------------------------------------------
+
+    private ScimUserResponse.ScimUser parseScimResponse(String body, String username) {
+        try {
+            if (body == null || body.trim().startsWith("<")) {
+                log.error("Response is HTML not JSON");
+                return null;
+            }
+
+            ScimUserResponse scimResponse = objectMapper.readValue(body, ScimUserResponse.class);
+
+            if (scimResponse.getTotalResults() == 0
+                    || scimResponse.getResources() == null
+                    || scimResponse.getResources().isEmpty()) {
+                log.warn("No user found for username: {}", username);
+                return null;
+            }
+
+            ScimUserResponse.ScimUser user = scimResponse.getResources().get(0);
+            log.info("User found — name: {}, email: {}",
+                    user.getFullName(), user.getPrimaryEmail());
+            return user;
+
+        } catch (Exception e) {
+            log.warn("Failed to parse SCIM response: {}", e.getMessage());
             return null;
         }
     }
