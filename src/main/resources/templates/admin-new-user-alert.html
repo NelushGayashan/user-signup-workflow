@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 40px auto; background: #fff;
+            border-radius: 8px; overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: #1a1a2e; padding: 32px 40px; text-align: center; }
+        .header h1 { color: #fff; margin: 0; font-size: 20px; }
+        .badge { display: inline-block; margin-top: 10px; background: #FF7300;
+            color: #fff; padding: 4px 14px; border-radius: 20px;
+            font-size: 12px; font-weight: bold; letter-spacing: 1px; }
+        .body { padding: 36px 40px; color: #333; }
+        .body p { line-height: 1.7; font-size: 15px; }
+        table { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 14px; }
+        th { text-align: left; background: #1a1a2e; color: #fff; padding: 10px 14px; }
+        td { padding: 10px 14px; border-bottom: 1px solid #eee; }
+        tr:last-child td { border-bottom: none; }
+        td:first-child { font-weight: bold; color: #555; width: 40%; }
+        .footer { background: #f4f6f9; text-align: center;
+            padding: 20px; font-size: 12px; color: #888; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🔔 New User Registration Alert</h1>
+        <div class="badge">ADMIN NOTIFICATION</div>
+    </div>
+    <div class="body">
+        <p>Hello <strong>Super Admin</strong>,</p>
+        <p>A new user has registered on the Developer Portal.
+            The signup workflow has been approved and the user has been notified.</p>
+        <table>
+            <tr><th colspan="2">New User Details</th></tr>
+            <tr>
+                <td>Full Name</td>
+                <td th:text="${fullName}">John Doe</td>
+            </tr>
+            <tr>
+                <td>Username</td>
+                <td th:text="${username}">john_doe</td>
+            </tr>
+            <tr>
+                <td>Email</td>
+                <td th:text="${userEmail}">john@example.com</td>
+            </tr>
+            <tr>
+                <td>Tenant Domain</td>
+                <td th:text="${tenantDomain}">carbon.super</td>
+            </tr>
+            <tr>
+                <td>Registered On</td>
+                <td th:text="${signupDate}">2026-06-01 10:00:00</td>
+            </tr>
+        </table>
+        <p>You can manage this user via the WSO2 IS Management Console
+            or the APIM Admin Portal.</p>
+        <p>Regards,<br/><strong>API Platform Workflow Engine</strong></p>
+    </div>
+    <div class="footer">
+        <p>Automated message from the Workflow Engine. Do not reply.</p>
+    </div>
+</div>
+</body>
+</html>

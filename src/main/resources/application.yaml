@@ -1,0 +1,39 @@
+server:
+  port: 8085
+
+wso2:
+  is:
+    host: https://localhost:9443
+    admin-username: admin
+    admin-password: admin
+    clientId: 6SrFRZk5uLJxkBEjtZUu23J97L0a
+    clientName: scim2_client
+  apim:
+    host: https://localhost:9443
+    admin-username: admin
+    admin-password: admin
+    workflow-callback-url: ${wso2.apim.host}/api/am/admin/v4/workflows/update-workflow-status
+
+app:
+  admin-email: superadmin@yourdomain.com
+  portal-url: http://localhost:9443/devportal
+
+spring:
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    cache: false
+
+logging:
+  level:
+    com.example.usersignupworkflow: DEBUG

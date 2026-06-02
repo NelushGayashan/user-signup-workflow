@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 40px auto; background: #fff;
+            border-radius: 8px; overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: #FF7300; padding: 32px 40px; text-align: center; }
+        .header h1 { color: #fff; margin: 0; font-size: 22px; }
+        .body { padding: 36px 40px; color: #333; }
+        .body p { line-height: 1.7; font-size: 15px; }
+        .info-box { background: #f9f9f9; border-left: 4px solid #FF7300;
+            border-radius: 4px; padding: 16px 20px; margin: 24px 0; }
+        .info-box p { margin: 6px 0; font-size: 14px; }
+        .info-box span { font-weight: bold; color: #FF7300; }
+        .cta { display: inline-block; margin-top: 20px; padding: 12px 28px;
+            background: #FF7300; color: #fff; text-decoration: none;
+            border-radius: 5px; font-size: 15px; font-weight: bold; }
+        .footer { background: #f4f6f9; text-align: center;
+            padding: 20px; font-size: 12px; color: #888; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🎉 Welcome to the Developer Portal</h1>
+    </div>
+    <div class="body">
+        <p>Hi <strong th:text="${fullName}">User</strong>,</p>
+        <p>Your developer portal account has been successfully created.
+            You can now explore and subscribe to our APIs.</p>
+        <div class="info-box">
+            <p><span>Username :</span>
+                <span th:text="${username}">john_doe</span></p>
+            <p><span>Registered On :</span>
+                <span th:text="${signupDate}">2026-06-01 10:00:00</span></p>
+        </div>
+        <p>Click below to log in and get started:</p>
+        <a th:href="${portalUrl}" class="cta">Go to Developer Portal</a>
+        <p style="margin-top:32px;">
+            If you did not create this account, please contact support immediately.
+        </p>
+        <p>Best regards,<br/><strong>API Platform Team</strong></p>
+    </div>
+    <div class="footer">
+        <p>This is an automated message. Please do not reply.</p>
+    </div>
+</div>
+</body>
+</html>
