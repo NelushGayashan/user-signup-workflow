@@ -4,6 +4,7 @@ import com.example.usersignupworkflow.model.ScimUserResponse;
 import com.example.usersignupworkflow.model.WorkflowRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -12,9 +13,14 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class UserSignupWorkflowService {
 
-    private final WsoUserService       wsoUserService;
-    private final EmailService         emailService;
-    private final ApimCallbackService  apimCallbackService;
+    private final WsoUserService      wsoUserService;
+    private final EmailService        emailService;
+    private final ApimCallbackService apimCallbackService;
+
+    @Value("${app.admin-email}")
+    private String fallbackAdminEmail;
+
+    // -------------------------------------------------------------------------
 
     @Async("workflowExecutor")
     public void processAsync(WorkflowRequest request) {
@@ -30,29 +36,26 @@ public class UserSignupWorkflowService {
         log.info("  tenantDomain : {}", tenantDomain);
         log.info("=====================================================");
 
-        // ── Step 1: Fetch user from WSO2 IS ──────────────────────────────
+        // ── Step 1: Fetch new user details from WSO2 IS ──────────────────────
         String userEmail = null;
         String fullName  = rawUsername;
 
         try {
-            ScimUserResponse.ScimUser user =
-                    wsoUserService.fetchUser(rawUsername);
-
+            ScimUserResponse.ScimUser user = wsoUserService.fetchUser(rawUsername);
             if (user != null) {
                 userEmail = user.getPrimaryEmail();
                 fullName  = user.getFullName();
-                log.info("User resolved — name: {}, email: {}",
-                        fullName, userEmail);
+                log.info("User resolved — name: {}, email: {}", fullName, userEmail);
             } else {
                 log.warn("User '{}' not found in WSO2 IS. " +
-                        "Emails will be skipped.", rawUsername);
+                        "User email will be skipped.", rawUsername);
             }
         } catch (Exception e) {
             log.error("Error fetching user '{}' from IS: {}",
                     rawUsername, e.getMessage(), e);
         }
 
-        // ── Step 2: Send signup success email to new user ─────────────────
+        // ── Step 2: Send welcome email to new user ────────────────────────────
         if (userEmail != null) {
             try {
                 emailService.sendUserSignupSuccessEmail(
@@ -62,25 +65,39 @@ public class UserSignupWorkflowService {
                         userEmail, e.getMessage());
             }
         } else {
-            log.warn("Skipping user email — no address for '{}'", rawUsername);
+            log.warn("Skipping user email — no address found for '{}'", rawUsername);
         }
 
-        // ── Step 3: Send admin alert email ────────────────────────────────
+        // ── Step 3: Fetch admin email from WSO2 IS ────────────────────────────
+        String adminEmail = null;
+        try {
+            adminEmail = wsoUserService.fetchAdminEmail();
+        } catch (Exception e) {
+            log.warn("Could not fetch admin email from IS: {}", e.getMessage());
+        }
+
+        if (adminEmail == null) {
+            log.warn("Using fallback admin email: {}", fallbackAdminEmail);
+            adminEmail = fallbackAdminEmail;
+        }
+
+        // ── Step 4: Send alert email to admin ─────────────────────────────────
         try {
             emailService.sendAdminNewUserAlertEmail(
                     fullName,
                     rawUsername,
                     userEmail != null ? userEmail : "N/A",
-                    tenantDomain
+                    tenantDomain,
+                    adminEmail
             );
         } catch (Exception e) {
             log.warn("Admin email failed: {}. Continuing.", e.getMessage());
         }
 
-        // ── Step 4: Approve signup in APIM ────────────────────────────────
+        // ── Step 5: Approve signup in APIM ────────────────────────────────────
         String description = userEmail != null
                 ? "User signup approved. Email notifications sent."
-                : "User signup approved. Email skipped — no address in IS.";
+                : "User signup approved. Email skipped — no address found in IS.";
 
         try {
             apimCallbackService.approveSignup(workflowReference, description);

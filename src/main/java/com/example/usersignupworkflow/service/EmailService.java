@@ -22,15 +22,14 @@ public class EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
 
-    @Value("${app.admin-email}")
-    private String adminEmail;
-
     @Value("${app.portal-url}")
     private String portalUrl;
 
     private static final DateTimeFormatter FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    // -------------------------------------------------------------------------
+    // Send welcome email to new user
     // -------------------------------------------------------------------------
 
     public void sendUserSignupSuccessEmail(String toEmail,
@@ -65,12 +64,15 @@ public class EmailService {
     }
 
     // -------------------------------------------------------------------------
+    // Send new user alert email to admin
+    // -------------------------------------------------------------------------
 
     public void sendAdminNewUserAlertEmail(String fullName,
                                            String username,
                                            String userEmail,
-                                           String tenantDomain) {
-        log.info("Sending admin alert email → {}", adminEmail);
+                                           String tenantDomain,
+                                           String toEmail) {
+        log.info("Sending admin alert email → {}", toEmail);
         try {
             Context context = new Context();
             context.setVariable("fullName",     fullName);
@@ -83,16 +85,16 @@ public class EmailService {
             String html = templateEngine.process("admin-new-user-alert", context);
 
             sendHtmlEmail(
-                    adminEmail,
+                    toEmail,
                     "🔔 New User Registration — " + username,
                     html
             );
 
-            log.info("Admin alert email sent → {}", adminEmail);
+            log.info("Admin alert email sent → {}", toEmail);
 
         } catch (Exception e) {
-            log.error("Failed to send admin alert email: {}",
-                    e.getMessage(), e);
+            log.error("Failed to send admin alert email to {}: {}",
+                    toEmail, e.getMessage(), e);
             throw new RuntimeException("Failed to send admin email", e);
         }
     }

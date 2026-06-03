@@ -36,9 +36,9 @@ public class ScimUserResponse {
 
         public String getFullName() {
             if (name == null) return userName;
-            String first  = name.getGivenName()  != null ? name.getGivenName()  : "";
-            String last   = name.getFamilyName()  != null ? name.getFamilyName() : "";
-            String full   = (first + " " + last).trim();
+            String first = name.getGivenName()  != null ? name.getGivenName()  : "";
+            String last  = name.getFamilyName() != null ? name.getFamilyName() : "";
+            String full  = (first + " " + last).trim();
             return full.isEmpty() ? userName : full;
         }
     }

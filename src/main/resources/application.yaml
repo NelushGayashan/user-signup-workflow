@@ -6,8 +6,6 @@ wso2:
     host: https://localhost:9443
     admin-username: admin
     admin-password: admin
-    client-id: EaxFExdPy_UxaJcaGqrbMD_NLbMa
-    client-secret: tHUOUhdwlzQR024LsmbLTmuUdywa
   apim:
     host: https://localhost:9443
     admin-username: admin
@@ -15,7 +13,7 @@ wso2:
     workflow-callback-url: ${wso2.apim.host}/api/am/admin/v4/workflows/update-workflow-status
 
 app:
-  admin-email: superadmin@yourdomain.com
+  admin-email: admin@yourdomain.com
   portal-url: http://localhost:9443/devportal
 
 spring:

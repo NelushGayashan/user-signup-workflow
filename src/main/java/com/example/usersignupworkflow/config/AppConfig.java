@@ -1,6 +1,5 @@
 package com.example.usersignupworkflow.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
@@ -18,10 +17,6 @@ import java.util.concurrent.Executor;
 @Configuration
 public class AppConfig {
 
-    /**
-     * RestTemplate with SSL verification disabled.
-     * Required for WSO2 IS / APIM which use self-signed certs locally.
-     */
     @Bean
     public RestTemplate restTemplate() throws Exception {
         SSLContextBuilder sslContextBuilder = new SSLContextBuilder();
@@ -46,9 +41,6 @@ public class AppConfig {
         return new RestTemplate(factory);
     }
 
-    /**
-     * Dedicated thread pool for @Async workflow processing.
-     */
     @Bean(name = "workflowExecutor")
     public Executor workflowExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -58,13 +50,5 @@ public class AppConfig {
         executor.setThreadNamePrefix("workflow-");
         executor.initialize();
         return executor;
-    }
-
-    /**
-     * ObjectMapper for manual JSON parsing in WsoUserService.
-     */
-    @Bean
-    public ObjectMapper objectMapper() {
-        return new ObjectMapper();
     }
 }
