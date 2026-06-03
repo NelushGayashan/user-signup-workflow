@@ -535,4 +535,4 @@ Response claims extracted:
 
 ---
 
-*Built for WSO2 API Manager 4.2.0 — Spring Boot 3.2 — Java 17*
+*Built for WSO2 API Manager 4.2.0 — Spring Boot 3.3 — Java 17*
