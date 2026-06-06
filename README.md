@@ -18,6 +18,7 @@
 - [API Reference](#api-reference)
 - [Troubleshooting](#troubleshooting)
 - [Tech Stack](#tech-stack)
+- [Key Design Decisions](#key-design-decisions)
 
 ---
 
@@ -117,33 +118,34 @@ APIM POST ──► 200 OK  (instant) ✅
 user-signup-workflow/
 │
 ├── pom.xml
+├── docker-compose.yml                          ← MailHog only
 │
 └── src/main/
     ├── java/com/example/usersignupworkflow/
     │   │
-    │   ├── UserSignupWorkflowApplication.java     ← Main class + @EnableAsync
+    │   ├── UserSignupWorkflowApplication.java  ← Main class + @EnableAsync
     │   │
     │   ├── config/
-    │   │   └── AppConfig.java                     ← SSL-bypass RestTemplate + thread pool
+    │   │   └── AppConfig.java                  ← SSL-bypass RestTemplate + thread pool
     │   │
     │   ├── controller/
-    │   │   └── UserSignupController.java           ← POST /workflow/user-signup
+    │   │   └── UserSignupController.java        ← POST /workflow/user-signup
     │   │
     │   ├── model/
-    │   │   ├── WorkflowRequest.java                ← Deserializes APIM payload
-    │   │   └── ScimUserResponse.java               ← User model built from SOAP claims
+    │   │   ├── WorkflowRequest.java             ← Deserializes APIM payload
+    │   │   └── ScimUserResponse.java            ← User model built from SOAP claims
     │   │
     │   └── service/
-    │       ├── UserSignupWorkflowService.java      ← @Async orchestrator
-    │       ├── WsoUserService.java                 ← SOAP calls to WSO2 IS
-    │       ├── EmailService.java                   ← Thymeleaf + JavaMail
-    │       └── ApimCallbackService.java            ← Approval callback to APIM
+    │       ├── UserSignupWorkflowService.java   ← @Async orchestrator
+    │       ├── WsoUserService.java              ← SOAP calls to WSO2 IS
+    │       ├── EmailService.java                ← Thymeleaf + JavaMail
+    │       └── ApimCallbackService.java         ← Approval callback to APIM
     │
     └── resources/
         ├── application.yml
         └── templates/
-            ├── user-signup-success.html            ← Welcome email to new user
-            └── admin-new-user-alert.html           ← Alert email to admin
+            ├── user-signup-success.html         ← Welcome email to new user
+            └── admin-new-user-alert.html        ← Alert email to admin
 ```
 
 ---
@@ -152,19 +154,26 @@ user-signup-workflow/
 
 | Requirement | Version | Notes |
 |-------------|---------|-------|
-| Java | 17+ | |
-| Maven | 3.6+ | |
+| Java | 17+ | Required to run Spring Boot |
+| Maven | 3.6+ | Required to build the project |
 | WSO2 API Manager | 4.2.0 | Running on port 9443 |
-| MailHog | Latest | For local email testing |
+| Docker Desktop | 20.x+ | Required to run MailHog via Docker Compose |
 
-### Install MailHog (Local Email Testing)
+### Check Docker is Installed
 
-Download the Windows executable from:
+```bash
+docker --version
+docker compose version
 ```
-https://github.com/mailhog/MailHog/releases/latest
+
+Expected output:
+```
+Docker version 27.x.x
+Docker Compose version v2.x.x
 ```
 
-Download `MailHog_windows_amd64.exe` and run it directly — no installation needed.
+> **Important:** Use `docker compose` (no hyphen). Docker Desktop ships with Compose v2.
+> The old `docker-compose` command is not available in Docker Desktop.
 
 ---
 
@@ -214,6 +223,8 @@ logging:
 
 ### For Production (Real Gmail SMTP)
 
+When you are ready to send real emails, replace the `spring.mail` section:
+
 ```yaml
 spring:
   mail:
@@ -229,39 +240,134 @@ spring:
             enable: true
 ```
 
-> Generate a Gmail App Password at: `Google Account → Security → 2-Step Verification → App Passwords`
+> Generate a Gmail App Password at:
+> `Google Account → Security → 2-Step Verification → App Passwords`
 
 ---
 
 ## Running the Project
 
+### Services Overview
+
+This project uses three services that must all be running at the same time:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Service          How to Run         Port               │
+├─────────────────────────────────────────────────────────┤
+│  WSO2 APIM        Locally            9443               │
+│  MailHog          Docker Compose     1025 (SMTP)        │
+│                                      8025 (Web UI)      │
+│  Spring Boot      mvn spring-boot:run  8085             │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
 ### Step 1 — Start WSO2 API Manager
 
 ```bash
 cd <APIM_HOME>/bin
-./api-manager.bat         # Windows
-./api-manager.sh          # Linux/Mac
+
+# Windows
+.\api-manager.bat
+
+# Linux / Mac
+./api-manager.sh
 ```
 
-Wait for:
+Wait until you see:
+
 ```
 [SERVER STARTED]
 Mgt Console URL : https://localhost:9443/carbon
 ```
 
-### Step 2 — Start MailHog
+This takes approximately 2 to 3 minutes on first start.
+
+---
+
+### Step 2 — Start MailHog with Docker Compose
+
+MailHog is the local fake SMTP server. Docker Compose spins it up in one command.
+
+Your `docker-compose.yml`:
+
+```yaml
+services:
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+```
+
+Start it:
 
 ```bash
-MailHog_windows_amd64.exe
+docker compose up -d
 ```
 
-Wait for:
-```
-[SMTP] Binding to address: 0.0.0.0:1025
-[HTTP] Binding to address: 0.0.0.0:8025
+Verify it is running:
+
+```bash
+docker compose ps
 ```
 
-Open MailHog UI: `http://localhost:8025`
+Expected output:
+
+```
+NAME        IMAGE                    STATUS    PORTS
+mailhog     mailhog/mailhog:latest   Up        0.0.0.0:1025->1025, 0.0.0.0:8025->8025
+```
+
+Open the MailHog web UI in your browser:
+
+```
+http://localhost:8025
+```
+
+You should see an empty inbox — ready to catch emails.
+
+#### What MailHog Does
+
+MailHog is a **fake SMTP server** for local development. It catches all emails sent to port `1025` and displays them in its web UI at port `8025`. No real emails are sent to actual inboxes. This makes it completely safe for development and testing.
+
+```
+Spring Boot engine
+    sends email via SMTP → localhost:1025
+                                  ↓
+                             MailHog catches it
+                                  ↓
+                     View at http://localhost:8025
+                     (never forwarded to real inbox)
+```
+
+#### Docker Compose Commands Reference
+
+```bash
+# Start MailHog in background
+docker compose up -d
+
+# Stop MailHog
+docker compose down
+
+# Check if running
+docker compose ps
+
+# View MailHog logs
+docker compose logs mailhog
+
+# View logs in real time
+docker compose logs -f mailhog
+
+# Restart MailHog
+docker compose restart mailhog
+```
+
+---
 
 ### Step 3 — Start Spring Boot Engine
 
@@ -270,27 +376,36 @@ cd user-signup-workflow
 mvn spring-boot:run
 ```
 
-Wait for:
+Wait until you see:
+
 ```
 Started UserSignupWorkflowApplication on port 8085
 ```
 
-### Startup Order
+---
+
+### Startup Order Summary
 
 ```
-1. WSO2 APIM     ← start first  (takes 2-3 minutes)
-2. MailHog       ← start second (instant)
-3. Spring Boot   ← start third  (5 seconds)
+1. WSO2 APIM          ← start first   (2-3 minutes to fully start)
+        ↓
+2. MailHog            ← start second  (instant via docker compose up -d)
+        ↓
+3. Spring Boot        ← start third   (5 seconds via mvn spring-boot:run)
 ```
 
-### Verify All Services
+---
 
-| Service | URL | Expected |
-|---------|-----|----------|
-| WSO2 Dev Portal | `https://localhost:9443/devportal` | Portal homepage |
-| WSO2 Carbon Console | `https://localhost:9443/carbon` | Login page |
-| MailHog UI | `http://localhost:8025` | Empty inbox |
-| Spring Boot | `http://localhost:8085` | Running (405 on GET) |
+### Verify All Services Are Running
+
+Open each of these in your browser:
+
+| Service | URL | Expected Result |
+|---------|-----|-----------------|
+| WSO2 Dev Portal | `https://localhost:9443/devportal` | Developer portal homepage |
+| WSO2 Carbon Console | `https://localhost:9443/carbon` | Admin login page |
+| MailHog Web UI | `http://localhost:8025` | Empty inbox, ready |
+| Spring Boot Engine | `http://localhost:8085` | Returns 405 (alive — POST only) |
 
 ---
 
@@ -299,6 +414,7 @@ Started UserSignupWorkflowApplication on port 8085
 ### Edit `workflow-extensions.xml`
 
 Location:
+
 ```
 <APIM_HOME>/repository/deployment/server/webapps/
   api#am#admin#v4/WEB-INF/classes/workflow-extensions.xml
@@ -306,12 +422,14 @@ Location:
 
 Find the `<UserSignUp>` block and replace it:
 
-**Before (default):**
+**Before (default — silent auto-approval):**
+
 ```xml
 <UserSignUp executor="org.wso2.carbon.apimgt.impl.workflow.UserSignUpSimpleWorkflowExecutor"/>
 ```
 
-**After (custom workflow):**
+**After (custom workflow engine):**
+
 ```xml
 <UserSignUp
     executor="org.wso2.carbon.apimgt.impl.workflow.UserSignUpWSWorkflowExecutor">
@@ -325,16 +443,21 @@ Find the `<UserSignUp>` block and replace it:
 ```
 
 > **No APIM restart needed** — WSO2 hot-reloads `workflow-extensions.xml` at runtime.
+> Changes take effect immediately after saving the file.
 
 ### Set Admin Email in Carbon
 
+The engine fetches the admin email dynamically from WSO2 IS. You must set it first:
+
 ```
 https://localhost:9443/carbon
-→ Home → Users and Roles → Users → List → admin → User Profile
-→ Set Email field → Save
+→ Home → Users and Roles → Users → List
+→ Click admin → User Profile
+→ Set Email field to your email address
+→ Click Update
 ```
 
-The engine fetches the admin's email dynamically from this profile on every signup.
+Once set, every signup notification goes to this email. If you change it in Carbon, the next signup automatically uses the new address — no config change needed.
 
 ---
 
@@ -342,20 +465,24 @@ The engine fetches the admin's email dynamically from this profile on every sign
 
 ### Register a New User
 
-1. Go to `https://localhost:9443/devportal`
-2. Click **Sign In → Register**
-3. Fill in:
-   ```
-   First Name : Test
-   Last Name  : User
-   Username   : testuser
-   Email      : testuser@example.com
-   Password   : Test@1234
-   ```
-   ![img_1.png](img_1.png)
-4. Click **Register**
+1. Open `https://localhost:9443/devportal`
+2. Click **Sign In** (top right corner)
+3. Click **Register**
+4. Fill in the form:
 
-### Expected Spring Boot Logs
+```
+First Name : Test
+Last Name  : User
+Username   : testuser
+Email      : testuser@example.com
+Password   : Test@1234
+```
+
+5. Click **Register**
+
+### Watch the Spring Boot Logs
+
+Immediately after clicking Register, switch to your Spring Boot terminal window. You should see:
 
 ```
 ==> Received user signup workflow request
@@ -380,10 +507,13 @@ Signup approved in APIM — ref: xxxxxxxx-...
 Workflow complete for: testuser
 =====================================================
 ```
+![img_4.png](img_4.png)
 
-### Expected MailHog Emails
+### Check MailHog for Emails
 
-Open `http://localhost:8025`:
+Open `http://localhost:8025`
+
+You should see two emails:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -393,16 +523,15 @@ Open `http://localhost:8025`:
 │  noreply@apiplatform     🔔 New User Registration — testuser     │
 └──────────────────────────────────────────────────────────────────┘
 ```
-![img.png](img.png)
-![img_2.png](img_2.png)
-![img_3.png](img_3.png)
+![img_5.png](img_5.png)
+Click either email to see the fully rendered HTML template.
 
-### Verify User is Active
+### Verify User is Active in Carbon
 
 ```
 https://localhost:9443/carbon
 → Home → Users and Roles → Users → List
-→ Find testuser → Status: Active ✅
+→ Find testuser → Status should be Active ✅
 ```
 
 ---
@@ -413,29 +542,29 @@ https://localhost:9443/carbon
 
 Sent to the new user after successful signup.
 
-**Variables:**
+**Variables injected by Thymeleaf:**
 
-| Variable | Description |
-|----------|-------------|
-| `${fullName}` | User's full name from WSO2 IS |
-| `${username}` | Their WSO2 username |
-| `${signupDate}` | Registration timestamp |
-| `${portalUrl}` | Dev Portal URL for CTA button |
-
+| Variable | Source | Example Value |
+|----------|--------|---------------|
+| `${fullName}` | SOAP claim: givenname + lastname | Test User |
+| `${username}` | APIM payload: userName | testuser |
+| `${signupDate}` | LocalDateTime.now() at processing time | 2026-06-03 10:30:00 |
+| `${portalUrl}` | application.yml: app.portal-url | http://localhost:9443/devportal |
+![img_6.png](img_6.png)
 ### Admin Alert Email — `admin-new-user-alert.html`
 
 Sent to the admin when a new user registers.
 
-**Variables:**
+**Variables injected by Thymeleaf:**
 
-| Variable | Description |
-|----------|-------------|
-| `${fullName}` | New user's full name |
-| `${username}` | New user's username |
-| `${userEmail}` | New user's email address |
-| `${tenantDomain}` | Tenant domain (e.g. `carbon.super`) |
-| `${signupDate}` | Registration timestamp |
-
+| Variable | Source | Example Value |
+|----------|--------|---------------|
+| `${fullName}` | SOAP claim: givenname + lastname | Test User |
+| `${username}` | APIM payload: userName | testuser |
+| `${userEmail}` | SOAP claim: emailaddress | testuser@example.com |
+| `${tenantDomain}` | APIM payload: tenantDomain | carbon.super |
+| `${signupDate}` | LocalDateTime.now() at processing time | 2026-06-03 10:30:00 |
+![img_7.png](img_7.png)
 ---
 
 ## API Reference
@@ -445,6 +574,7 @@ Sent to the admin when a new user registers.
 Receives the signup event from WSO2 APIM.
 
 **Request Body (sent by APIM):**
+
 ```json
 {
   "UserSignupProcessRequest": {
@@ -457,15 +587,23 @@ Receives the signup event from WSO2 APIM.
 ```
 
 **Response:**
+
 ```
 HTTP 200 OK
 Workflow received. Processing in background.
 ```
 
-**APIM Callback (sent back to APIM):**
+**APIM Approval Callback (sent back to APIM after processing):**
+
 ```
-POST /api/am/admin/v4/workflows/update-workflow-status?workflowReferenceId={ref}
-Body: { "status": "APPROVED", "description": "..." }
+POST /api/am/admin/v4/workflows/update-workflow-status
+     ?workflowReferenceId=895a4631-3f2a-4b1c-9d8e-abc123
+
+Body:
+{
+  "status": "APPROVED",
+  "description": "User signup approved. Email notifications sent."
+}
 ```
 
 ---
@@ -474,15 +612,18 @@ Body: { "status": "APPROVED", "description": "..." }
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| No logs in Spring Boot on signup | Wrong `serviceEndpoint` in `workflow-extensions.xml` | Check IP/port, ensure engine is reachable from APIM |
-| `workflowReference` is null | APIM version sends different payload structure | Log raw body to inspect actual JSON |
-| SCIM2 returning HTML login page | WSO2 APIM 4.2 CSRF protection blocks Basic Auth on SCIM2 | Use SOAP `RemoteUserStoreManagerService` instead |
-| APIM callback `400 Bad Request` | Wrong field name or missing `workflowReferenceId` query param | Check Swagger at `/api/am/admin/v4/swagger.yaml` |
-| User stays PENDING | APIM callback failed | Check `CRITICAL` log, verify callback URL and credentials |
-| No emails in MailHog | MailHog not running on port 1025 | Run `MailHog_windows_amd64.exe`, verify port 1025 |
-| Admin email shows fallback value | Admin user has no email set in Carbon | Set email at Carbon → Users → admin → User Profile |
-| SSL handshake error | Self-signed cert on WSO2 | `AppConfig.java` SSL-bypass `RestTemplate` handles this |
-| `@Async` runs synchronously | `@EnableAsync` missing from main class | Add `@EnableAsync` to `UserSignupWorkflowApplication` |
+| No logs in Spring Boot when user registers | Wrong `serviceEndpoint` in `workflow-extensions.xml` | Verify engine is on port 8085, check the URL in xml |
+| `workflowReference` is null in logs | APIM version sends different payload structure | Temporarily log `@RequestBody String rawBody` to see actual JSON |
+| SCIM2 returns Carbon login HTML | APIM 4.2 CSRF protection blocks Basic Auth on SCIM2 | Use SOAP `RemoteUserStoreManagerService` — already implemented |
+| APIM callback `400 Bad Request` | `workflowReferenceId` must be URL query param not body field | Verify `ApimCallbackService` uses `UriComponentsBuilder.queryParam()` |
+| User stays PENDING after signup | APIM callback failed | Check logs for `CRITICAL` keyword, verify callback URL and credentials |
+| No emails appear in MailHog | MailHog container not running on port 1025 | Run `docker compose up -d`, verify `docker compose ps` |
+| MailHog web UI not opening | Port 8025 not exposed | Check `docker compose ps`, restart with `docker compose restart mailhog` |
+| Admin email uses fallback value | Admin user has no email set in Carbon | Go to Carbon → Users → admin → User Profile → set Email |
+| SSL handshake exception on WSO2 calls | WSO2 self-signed certificate not trusted | `AppConfig.java` SSL-bypass `RestTemplate` handles this automatically |
+| `@Async` runs synchronously | `@EnableAsync` missing from main class | Add `@EnableAsync` to `UserSignupWorkflowApplication.java` |
+| `docker-compose` command not found | Docker Compose v1 not installed | Use `docker compose` without the hyphen — Compose v2 syntax |
+| Docker Desktop virtualization error | Hardware virtualization disabled | Enable Intel VT-x or AMD-V in BIOS settings and restart |
 
 ---
 
@@ -490,10 +631,18 @@ Body: { "status": "APPROVED", "description": "..." }
 
 WSO2 APIM 4.2 has CSRF protection that redirects SCIM2 Basic Auth requests to the Carbon login page. OAuth Bearer tokens on SCIM2 return `403 Forbidden` even with `internal_user_mgt_view` scope.
 
-The solution is to use the **WSO2 Carbon SOAP API** (`RemoteUserStoreManagerService`) which accepts Basic Auth reliably and returns all user claim values including email, first name, and last name.
+**What was tried:**
+
+| Attempt | Result | Reason |
+|---------|--------|--------|
+| SCIM2 with Basic Auth | Returns Carbon login HTML (200 OK) | CSRF filter redirects to login page |
+| SCIM2 with Bearer Token | 403 Forbidden | DCR client lacks IS admin permissions |
+| SCIM2 with all IS scopes | 403 Forbidden | IS role assignment required, scope alone not enough |
+| SOAP RemoteUserStoreManagerService | 200 OK with full user data ✅ | Bypasses CSRF, accepts Basic Auth directly |
+
+**The solution — SOAP Carbon Admin Service:**
 
 ```
-SOAP Request:
 POST /services/RemoteUserStoreManagerService
 Authorization: Basic YWRtaW46YWRtaW4=
 SOAPAction: urn:getUserClaimValues
@@ -508,17 +657,19 @@ Response claims extracted:
 
 ## Tech Stack
 
-| Technology | Purpose |
-|------------|---------|
-| Spring Boot 3.2 | Application framework |
-| Spring Web | REST endpoint (`/workflow/user-signup`) |
-| Spring Mail + JavaMail | Email sending |
-| Thymeleaf | HTML email templating |
-| Apache HttpClient 5 | SSL-bypass `RestTemplate` for WSO2 self-signed certs |
-| Lombok | Boilerplate reduction |
-| WSO2 APIM 4.2 | API Manager — triggers the workflow |
-| WSO2 IS (embedded) | Identity Server — user store via SOAP |
-| MailHog | Local SMTP server for email testing |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Spring Boot | 3.3.0 | Application framework |
+| Spring Web | Included | REST endpoint + RestTemplate |
+| Spring Mail + JavaMail | Included | Email sending via SMTP |
+| Thymeleaf | Included | HTML email template rendering |
+| Apache HttpClient 5 | Included | SSL-bypass RestTemplate for WSO2 self-signed certs |
+| Lombok | Included | Boilerplate reduction |
+| WSO2 API Manager | 4.2.0 | API gateway — triggers the signup workflow |
+| WSO2 IS (embedded) | 4.2.0 | Identity Server — user store accessed via SOAP |
+| MailHog | Latest | Local fake SMTP server for email testing |
+| Docker | 20.x+ | Runs MailHog container |
+| Docker Compose | v2.x+ | Manages MailHog with `docker compose up -d` |
 
 ---
 
@@ -532,7 +683,9 @@ Response claims extracted:
 | Email failures non-blocking | Notification failure should never prevent a user from completing signup |
 | SSL bypass RestTemplate | WSO2 uses self-signed certificates locally — standard RestTemplate fails SSL handshake |
 | `workflowReferenceId` as query param | APIM Admin API v4 requires this as a URL query parameter, not in the request body |
+| Docker only for MailHog | Spring Boot and APIM run locally — Docker used purely to run MailHog without installation |
+| `version` removed from docker-compose.yml | Docker Compose v2 treats `version` as obsolete — omitting it removes the warning |
 
 ---
 
-*Built for WSO2 API Manager 4.2.0 — Spring Boot 3.3 — Java 17*
+*Built for WSO2 API Manager 4.2.0 — Spring Boot 3.3 — Java 17 — Docker Compose v2*
